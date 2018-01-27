@@ -1,0 +1,7 @@
+setup.py
+PyXanes/PyXanes.py
+PyXanes/__init__.py
+PyXanes.egg-info/PKG-INFO
+PyXanes.egg-info/SOURCES.txt
+PyXanes.egg-info/dependency_links.txt
+PyXanes.egg-info/top_level.txt
