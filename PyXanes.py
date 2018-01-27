@@ -97,5 +97,3 @@ def check_scan_progress(path='./NiIt551Extended/NiIt551Extended_1/', root='NiIt5
     numcurr = len(glob.glob(path+root+'{}*'.format(index)))
     print( '{} datapoints left to go!\r'.format(numedxs-numcurr), end='')
 #     print( '|'+'-'*int((numcurr/numedxs*100))+'>|\r'.format(numedxs-numcurr), end='')
-
-def new
