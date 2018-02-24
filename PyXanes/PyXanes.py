@@ -1,6 +1,7 @@
 import os
 import re
 import itertools
+import dill
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -90,3 +91,35 @@ def quick_plot(sample, dosum=True, runnumber=None, batch=1, show=True):
         [plt.plot(*d, label=sample+str(i)) for i, d in spectra.items()]
     if show:
         plotly_show()
+
+def integral_normalize(spectra):
+    x, y = spectra
+    return np.array([x, y/np.sum(y)])
+
+class XesData:
+    
+    def __init__(self, sample, runnumber=None, batch=1, plotonload=True):
+        self.sample = sample
+        self.runs = get_run_data(self.sample, dosum=False, runnumber=runnumber, batch=batch)
+        self.spectrum = get_run_data(self.sample, dosum=True, runnumber=runnumber, batch=batch)
+        if plotonload:
+            quick_plot(sample,dosum=False,runnumber=runnumber,batch=batch)
+            
+    def plot(self, normalize=None, show=True):
+        if normalize == 'integral':
+            plt.plot(*integral_normalize(self.spectrum), label=self.sample)
+        else:
+            plt.plot(*self.spectrum, label=self.sample)
+        if show:
+            plotly_show()
+            
+    def save_to_file(self, filename):
+        '''Save compressed version of this python object to the current directory'''
+        print('Saving as: ', os.getcwd()+'\\'+filename)
+        with open(filename,'wb') as f:
+            dill.dump(self,f)
+
+def load_XesData(filename):
+    print('Attempting to load: ', os.getcwd()+'\\'+filename)
+    with open(filename,'rb') as f:
+        return dill.load(f)
