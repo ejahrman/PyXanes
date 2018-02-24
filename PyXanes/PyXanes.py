@@ -1,82 +1,92 @@
-import pandas as pd
+import os
 import re
+import itertools
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.interpolate import UnivariateSpline
+import pandas as pd
+from . import config
 
+
+import plotly.offline as py
+import plotly.tools as tls
+py.init_notebook_mode()
+
+def plotly_show():
+    #get fig and convert to plotly
+    fig = plt.gcf()
+    plotlyfig = tls.mpl_to_plotly(fig, resize=True)
     
-def import_file(file):
-    return pd.read_table(file, header=2)
+    #fix dumb automatic formatting choices
+    plotlyfig['layout']['xaxis1']['tickfont']['size']=14
+    plotlyfig['layout']['xaxis1']['titlefont']['size']=16
+    plotlyfig['layout']['yaxis1']['tickfont']['size']=14
+    plotlyfig['layout']['yaxis1']['titlefont']['size']=16
+    plotlyfig['layout']['showlegend'] = True
+    
+    # plot
+    py.iplot(plotlyfig)
 
-def get_spectrum_from_dataframe(df):
-    return df[['Energy_(eV)','cnts_per_live']].T.values
+def add_sample_dir_to_cache(sample):
+    filere = re.compile(r'{}_\d+__EDX_\d+.txt'.format(sample))
 
-def plot_from_txt(file, show=True, plotcolumn='energy'):
-    # possibility of multiple files to plot
-    if type(file) != list:
-        filelist = [file]
+    for root, dirs, files in os.walk(config.ROOTDIR):
+        for file in files:
+            if filere.match(file):
+                config.DIRCACHE[sample] = '/'.join(root.split('\\')[:-1])
+                break
+
+def get_sample_path(sample):
+    if sample in config.DIRCACHE:
+        return config.DIRCACHE[sample]
     else:
-        filelist = file
+        add_sample_dir_to_cache(sample)
+        return config.DIRCACHE[sample]
+
+def count_batches(path):
+    '''counts number of subdirectories in the root directory, and assumes that each represents a batch'''
+    return len([os.path.join(path, o) for o in os.scandir(path) if os.path.isdir(os.path.join(path,o))])
+
+def load_sample(sample, runnumber=None, batch=1):
+    '''
+    By default, starts with run 0, and loads all files in order.
     
-    #set energy or angle to plot
-    if plotcolumn == 'energy':
-        colindex = 0
-        xlabel = 'Energy (eV)'
-    elif plotcolumn == 'angle':
-        colindex = 1
-        xlabel = 'Theta (deg)'
-        
-    #regex to get run-name from filepath
-    namere = re.compile(r'.*/(.*)_alldata_(\d+).txt')
+    If runnumber is 'int', then the runs are loaded starting from there.
     
-    for f in filelist:
+    If runnumber is an interator, load each run in the iterator.
+    '''
+    if runnumber is None:
+        runnumber = itertools.count()
+    elif type(runnumber) is int:
+        runnumber = itertools.count(runnumber)
+    data = {}
+    for rn in runnumber:
         try:
-            i = -1
-            while True:
-                i += 1
-                data = get_spectrum_from_dataframe(import_file(f+'_alldata_{}.txt'.format(i)))
-                name = namere.search(f+'_alldata_{}.txt'.format(i)).group(1)+'-'+namere.search(f+'_alldata_{}.txt'.format(i)).group(2)
-                plt.plot(*data, label=name)
+            file = '{0}/{1}_{2}/{1}{2}_alldata_{3}.txt'.format(get_sample_path(sample),sample,batch,rn)
+            data[rn] = pd.read_table(file,header=2)
         except FileNotFoundError:
-            continue
-    plt.xlabel(xlabel)
-    plt.ylabel('Counts per live second')
+            break
+    return data
+
+def get_run_data(data, dosum=True, runnumber=None, batch=1):
+    if type(data) is str:
+        data = load_sample(data, runnumber=runnumber, batch=batch)
+    spectra = {}
+    for rn, df in data.items():
+        spectra[rn] = df[['Energy_(eV)','cnts_per_live']].T.values
+    if dosum:
+        xsum, ysum = spectra.pop(rn)
+        for rn, sp in spectra.items():
+            x, y = sp
+            assert all(xsum == x), 'Error, some data have different energies than others.'
+            ysum = ysum + y
+        spectra = np.array([xsum, ysum])
+    return spectra
+
+def quick_plot(sample, dosum=True, runnumber=None, batch=1, show=True):
+    spectra = get_run_data(sample, dosum=dosum, runnumber=runnumber, batch=batch)
+    if dosum:
+        plt.plot(*spectra, label=sample)
+    else:
+        [plt.plot(*d, label=sample+str(i)) for i, d in spectra.items()]
     if show:
         plotly_show()
-		
-def import_all(filelist, returnavg=True, removelist=[], verbose=False):
-    if type(filelist) != list:
-        filelist = [filelist]
-    datas = []
-    for f in filelist:
-        try:
-            i = -1
-            while True:
-                i += 1
-                if i in removelist:
-                    continue
-                data = get_spectrum_from_dataframe(import_file(f+'_alldata_{}.txt'.format(i)))
-                if verbose:
-                    print('Imported: ',f+'_alldata_{}.txt'.format(i))
-                datas.append(data)
-        except FileNotFoundError:
-            continue
-    datas = np.array(datas)
-    if returnavg:
-        x = datas[0,0]
-        for d in datas:
-            assert (d[0] == x).all(), 'Not all runs have same energy values'
-        datas = np.array([x,np.mean(datas[:,1],axis=0)])
-    return datas
-	
-def mu(izero, it):
-    xz, yz = izero
-    xt, yt = it
-    assert (xz == xt).all(), 'Need to have same energy values'
-    return np.array([xz, np.log(yz/yt)])
-	
-def check_scan_progress(path='./NiIt551Extended/NiIt551Extended_1/', root='NiIt551Extended_', index=2):
-    numedxs = len(glob.glob(path+root+'{}*'.format(0)))
-    numcurr = len(glob.glob(path+root+'{}*'.format(index)))
-    print( '{} datapoints left to go!\r'.format(numedxs-numcurr), end='')
-#     print( '|'+'-'*int((numcurr/numedxs*100))+'>|\r'.format(numedxs-numcurr), end='')
