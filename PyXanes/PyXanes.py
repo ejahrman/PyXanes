@@ -40,6 +40,7 @@ def get_sample_path(sample):
     if sample in config.DIRCACHE:
         return config.DIRCACHE[sample]
     else:
+        print('Directory for sample {} not yet cached, searching...'.format(sample))
         add_sample_dir_to_cache(sample)
         return config.DIRCACHE[sample]
 
@@ -92,9 +93,11 @@ def quick_plot(sample, dosum=True, runnumber=None, batch=1, show=True):
     if show:
         plotly_show()
 
+
 def integral_normalize(spectra):
     x, y = spectra
     return np.array([x, y/np.sum(y)])
+
 
 class XesData:
     
