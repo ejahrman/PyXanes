@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from . import config
+from .energyshift import energy_shift_angle
 
 
 import plotly.offline as py
@@ -95,7 +96,7 @@ def quick_plot(sample, dosum=True, runnumber=None, batch=1, show=True):
 
 
 def integral_normalize(spectra):
-    x, y = spectra
+    x, y = spectra.copy()
     return np.array([x, y/np.sum(y)])
 
 
@@ -108,11 +109,23 @@ class XesData:
         if plotonload:
             quick_plot(sample,dosum=False,runnumber=runnumber,batch=batch)
             
-    def plot(self, normalize=None, show=True):
-        if normalize == 'integral':
-            plt.plot(*integral_normalize(self.spectrum), label=self.sample)
+    def plot(self, normalize=False, show=True, ax=None, shifted=False):
+        # handle matplotlib ax for combined plots
+        if ax is None:
+            ax = plt.gca()
+
+        # optional shift
+        if shifted:
+            spectrum = self.shiftedspectrum
         else:
-            plt.plot(*self.spectrum, label=self.sample)
+            spectrum = self.spectrum
+        
+        #normalize, only 'integral' for now
+        if normalize:#todo: peak normalization needed?
+            spectrum = integral_normalize(spectrum)
+
+        ax.plot(*spectrum, label=self.sample)
+
         if show:
             plotly_show()
             
@@ -121,6 +134,58 @@ class XesData:
         print('Saving as: ', os.getcwd()+'\\'+filename)
         with open(filename,'wb') as f:
             dill.dump(self,f)
+    
+    def shift_spectrum(self, shiftenergy, eshift, yshift=0, yscale=1, normalize=False, resetanalyzer=False):
+        if not hasattr(self, 'analyzerconfig') or resetanalyzer:
+            print('Analyzer config not set, input now:')
+            material = input('Analyzer material (si or ge)? ')
+            h = int(input('[hkl] h? '))
+            k = int(input('[hkl] k? '))
+            l = int(input('[hkl] l? '))
+            self.analyzerconfig = {
+                'material': material,
+                'h': h,
+                'k': k,
+                'l': l
+            }
+        self.shiftparams=dict(shiftenergy=shiftenergy,eshift=eshift,yshift=yshift,yscale=yscale,normalize=normalize)
+
+        self.shiftedspectrum = energy_shift_angle(self.spectrum, shiftenergy, eshift, **self.analyzerconfig)
+
+        if yshift != 0 or yscale != 1 or normalize:
+            spectrum = self.shiftedspectrum
+            if normalize:
+                spectrum = integral_normalize(spectrum)
+            x, y = spectrum
+            self.shiftedspectrum = np.array([x, (y + yshift) * yscale])
+        return self.shiftedspectrum
+
+    def _add_lines_from_axes(self, ax=None):
+        if ax is None:
+            ax = plt.gca()
+        datas = [l.get_data() for l in ax.lines]
+        labels = [l.get_label() for l in ax.lines]
+        plt.clf()
+        return datas, labels
+
+    def interact_shift(self, shiftenergy=None):
+        from ipywidgets import interact, interactive
+        import ipywidgets as widgets
+        if shiftenergy is None:
+            print('Unspecified shift energy, will use left-most datapoint.\nShifting from {} eV'.format(self.spectrum[0,0]))
+            shiftenergy = self.spectrum[0,0]
+        datas, labels = self._add_lines_from_axes()
+        def compared_shifted(eshift, yshift, yscale, normalize=False):
+            self.shift_spectrum(shiftenergy, eshift, yshift, yscale, normalize)
+            self.plot(shifted=True, show=False)
+            [plt.plot(*d, label=l) for (d,l) in zip(datas,labels)]
+            plt.show()
+        interact(
+            compared_shifted, 
+            eshift=widgets.FloatSlider(min=-10, max=10, step=0.01, value=0, continuous_update=True),
+            yshift=widgets.FloatSlider(min=-0.01, max=0.01, step=0.0001, value=0, continuous_update=True),
+            yscale=widgets.FloatSlider(min=0, max=2, step=0.001, value=1, continuous_update=True)
+        )
 
 def load_XesData(filename):
     print('Attempting to load: ', os.getcwd()+'\\'+filename)

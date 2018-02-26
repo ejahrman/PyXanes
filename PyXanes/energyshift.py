@@ -54,11 +54,20 @@ spectrometerconfig = {
     'psi':40
 }
 
-def proper_energy_shift(spectrum, shiftenergy, amount, material, h, k, l):
-    x, y = spectrum
+def energy_shift_steps(spectrum, shiftenergy, amount, material, h, k, l):
+    x, y = spectrum.copy()
     steps = labview_calc_steps(labview_bragg_angle(x, material=material, h=h, k=k, l=l),**spectrometerconfig)
     cursteps = labview_calc_steps(labview_bragg_angle(shiftenergy, material=material, h=h, k=k, l=l),**spectrometerconfig)
     targetsteps = labview_calc_steps(labview_bragg_angle(shiftenergy+amount, material=material, h=h, k=k, l=l),**spectrometerconfig)
     shift = targetsteps - cursteps
     steps = steps + shift
     return np.array([labview_bragg_energy(labview_calc_angle(steps,**spectrometerconfig), material=material, h=h, k=k, l=l), y])
+
+def energy_shift_angle(spectrum, shiftenergy, amount, material, h, k, l):
+    x, y = spectrum.copy()
+    angles = labview_bragg_angle(x, material=material, h=h, k=k, l=l)
+    curangle = labview_bragg_angle(shiftenergy, material=material, h=h, k=k, l=l)
+    targetangle = labview_bragg_angle(shiftenergy+amount, material=material, h=h, k=k, l=l)
+    shift = targetangle - curangle
+    angles = angles + shift
+    return np.array([labview_bragg_energy(angles, material=material, h=h, k=k, l=l), y])
