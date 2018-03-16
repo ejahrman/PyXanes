@@ -29,6 +29,7 @@ def plotly_show():
     py.iplot(plotlyfig)
 
 def add_sample_dir_to_cache(sample):
+    '''warning, you're not allowed to save same name samples in different directories'''
     filere = re.compile(r'{}_\d+__EDX_\d+.txt'.format(sample))
 
     for root, dirs, files in os.walk(config.ROOTDIR):
@@ -103,6 +104,15 @@ def integral_normalize(spectra):
 class XesData:
     
     def __init__(self, sample, runnumber=None, batch=1, plotonload=True):
+        '''Loads XES data taken with the RatTrap instrument.
+
+        Args:
+            sample: name of the sample as specified in the LabView
+            runnumber: TODO
+            batch: batch number specified in LabView
+
+        TODO: do this better
+        '''
         self.sample = sample
         self.runs = get_run_data(self.sample, dosum=False, runnumber=runnumber, batch=batch)
         self.spectrum = get_run_data(self.sample, dosum=True, runnumber=runnumber, batch=batch)
@@ -186,6 +196,16 @@ class XesData:
             yshift=widgets.FloatSlider(min=-0.01, max=0.01, step=0.0001, value=0, continuous_update=True),
             yscale=widgets.FloatSlider(min=0, max=2, step=0.001, value=1, continuous_update=True)
         )
+
+    def difference(self):
+        xf, yf = self.runs[max(self.runs.keys())]
+        for k, (x, y) in self.runs.items():
+            ydiff = yf - y
+            if all(ydiff==0):
+                plt.plot(x, ydiff, 'k')
+            else:
+                plt.plot(x, ydiff)
+        plotly_show()
 
 def load_XesData(filename):
     print('Attempting to load: ', os.getcwd()+'\\'+filename)
