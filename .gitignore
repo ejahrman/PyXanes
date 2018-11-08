@@ -1,3 +1,5 @@
 build
 dist
-PyXanes.egg-info
+*.egg-info
+PyXanes/__pycache__/*
+*.pyc
